@@ -644,16 +644,22 @@ def load_checkpoint(model, optimizer, lr_scheduler, config: Config, privacy_engi
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _compute_grad_norm(model) -> float:
+def _compute_grad_norm(model, pre_noise: bool = False) -> float:
     """Compute the total gradient norm across all trainable parameters.
 
-    This is the definitive metric for matching non_dp vs dp_s0_cinf:
-    if grad_norms match, the optimizer sees the same update regardless
-    of BF16 loss drift through different autograd graphs.
+    Args:
+        pre_noise: If True, use p.summed_grad (Opacus pre-noise clipped gradient)
+                   instead of p.grad (which includes noise). Only available in DP mode
+                   after clip_and_accumulate but before add_noise.
+                   If False or summed_grad not available, use p.grad.
     """
     total_norm_sq = 0.0
     for p in model.parameters():
-        if p.requires_grad and p.grad is not None:
+        if not p.requires_grad:
+            continue
+        if pre_noise and hasattr(p, "summed_grad") and p.summed_grad is not None:
+            total_norm_sq += p.summed_grad.float().norm().item() ** 2
+        elif p.grad is not None:
             total_norm_sq += p.grad.float().norm().item() ** 2
     return total_norm_sq ** 0.5
 
@@ -948,10 +954,10 @@ def train(config: Config):
                     continue
 
                 # --- Real optimizer step boundary ---
-                # Compute grad_norm BEFORE lr_scheduler.step() (after optimizer.step())
-                # This is the definitive metric for non_dp vs dp matching —
-                # grad_norms should be identical even if loss drifts from BF16 rounding.
-                grad_norm = _compute_grad_norm(model)
+                # Compute grad_norm: in DP mode, use summed_grad (pre-noise clipped
+                # gradient) so the metric reflects the actual signal, not noise.
+                # In baseline mode, param.grad IS the signal (no noise).
+                grad_norm = _compute_grad_norm(model, pre_noise=is_dp)
 
                 lr_scheduler.step()
                 global_step += 1
