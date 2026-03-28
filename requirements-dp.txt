@@ -1,0 +1,18 @@
+# Additional dependencies for DP-LoRA training
+# Install: pip install -r requirements-dp.txt
+#
+# Base requirements (from requirements.txt) are still needed:
+#   kernels>=0.9.0, peft>=0.17.0, trl>=0.21.0, transformers>=4.55.0
+
+# DP training
+opacus>=1.5.3               # Meta's DP-SGD engine (LoRA support since v1.5)
+
+# Privacy accounting cross-validation
+dp-accounting               # Google's DP accounting library
+
+# HF ecosystem (for custom training loop)
+accelerate>=0.28.0          # Multi-GPU support (Phase 3+)
+datasets>=2.18.0            # HF Dataset loading
+
+# Config
+pyyaml                      # YAML config parsing

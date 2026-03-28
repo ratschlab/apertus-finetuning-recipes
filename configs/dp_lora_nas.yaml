@@ -1,0 +1,49 @@
+# DP-LoRA config for NAS testing (GTX 1080 8GB)
+# Uses TinyLlama-1.1B (same Llama arch, same LoRA target modules as Apertus 8B)
+
+mode: baseline
+
+# Model — random-init tiny Llama (same as DP-SGD Phase 0: 2L/256H/4A, vocab 8192)
+model_name_or_path: random_llama_125m
+dtype: float32
+
+# LoRA — same config as production (validates the DP machinery)
+lora_r: 16
+lora_alpha: 16
+lora_dropout: 0.0
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+
+# Data
+data_path: /workspace/synthetic-clinical-data/data/5000_patients/clinical_episodes.jsonl
+dataset_text_field: text
+max_length: 512
+
+# Training
+learning_rate: 2.0e-4
+num_epochs: 1
+per_device_batch_size: 1
+gradient_accumulation_steps: 1
+gradient_checkpointing: true
+warmup_ratio: 0.0
+lr_scheduler_type: cosine
+weight_decay: 0.0
+seed: 42
+
+# DP
+dp_epsilon: 3.0
+dp_delta: 2.0e-4
+dp_max_grad_norm: 1.0
+dp_target_batch_size: 64
+dp_loss_aggregation: sum
+
+# Output
+output_dir: /workspace/logs/dp_lora/sanity
+logging_steps: 1
+save_steps: 0

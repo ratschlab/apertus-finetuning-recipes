@@ -1,0 +1,57 @@
+# DP-LoRA fine-tuning configuration for Apertus 8B
+#
+# Usage:
+#   python dp_lora_train.py --config configs/dp_lora.yaml --mode baseline   # Phase 1
+#   python dp_lora_train.py --config configs/dp_lora.yaml --mode validate   # Phase 1.5
+#   python dp_lora_train.py --config configs/dp_lora.yaml --mode dp         # Phase 2a
+
+# Mode: baseline | validate | dp
+mode: baseline
+
+# Model
+model_name_or_path: alehc/swissai-apertus-8b
+dtype: bfloat16
+# attn_implementation: flash_attention_2  # Uncomment if FlashAttention passes validation
+
+# LoRA — per dp-lora-plan.md §5
+lora_r: 16
+lora_alpha: 16
+lora_dropout: 0.0        # MUST be 0 under DP (dropout adds per-sample gradient variance)
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+
+# Data — same JSONL used by DP-SGD Megatron pipeline
+# Each record = one patient (all episodes concatenated), so privacy_unit = patient
+data_path: ../synthetic-clinical-data/data/5000_patients/clinical_episodes.jsonl
+dataset_text_field: text
+max_length: 4096
+
+# Training
+learning_rate: 2.0e-4     # May need to increase under DP (McKenna et al.)
+num_epochs: 1
+per_device_batch_size: 4  # Physical batch (what fits in GPU memory)
+gradient_checkpointing: true
+warmup_ratio: 0.03
+lr_scheduler_type: cosine
+weight_decay: 0.0
+max_steps: -1             # -1 = use num_epochs
+seed: 42
+
+# DP parameters (only used when mode=dp)
+dp_epsilon: 3.0           # Target (epsilon, delta)-DP — used unless dp_noise_multiplier is set
+dp_delta: 2.0e-4          # < 1/N where N=4838 patients (1/4838 ≈ 2.07e-4)
+dp_max_grad_norm: 1.0     # Per-sample gradient clipping norm C
+dp_target_batch_size: 512 # Logical batch for DP accounting (virtual steps via BatchMemoryManager)
+# dp_noise_multiplier:     # Set sigma directly (overrides dp_epsilon). Use 0 for clean experiment.
+dp_loss_aggregation: sum  # sum (matches DP-SGD Megatron) or mean. C is comparable across pipelines with sum.
+
+# Output
+output_dir: output/dp_lora
+logging_steps: 1
+save_steps: 0             # 0 = save only at end; set >0 for periodic checkpoints
